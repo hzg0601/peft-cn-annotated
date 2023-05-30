@@ -12,7 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+"""
+核心方法为PromptEncoder:
+    1. 先定义一个virtual_token序列的长度,
+        计算最终的virtual_token序列的长度为config.num_virtual_tokens * config.num_transformer_submodules；
+        意味着每个transformer子模块都有独立的virtual_token;
+    2. 然后定义virtual_token索引的embedding层；
+    3. 先加载指定的tokenizer;
+    4. 对初始文本进行tokenize,记录初始文本tokenizer后的长度；
+    5. 如果初始文本tokenizer后的长度大于虚拟token的长度，则初始文本内容只取虚拟token的长度；
+    6. 如果初始文本tokenizer后的长度小于虚拟token的长度，则将初始文本内容重复填充至虚拟token的长度；
+    7. 从而确保初始文本tokenizer后的长度等于虚拟token的长度；
+    8. 使用基础模型的词嵌入层对初始文本tokenized进行嵌入，并转换为float32位；
+    9. 将基础模型嵌入并转换后的权重设为可训练参数，并赋值给virtual_token的嵌入层的权重，亦即以prompt初始化文本的嵌入向量为初始权重
+    10. 训练时只需获取给定虚拟token对应的嵌入向量。
+"""
 import enum
 import math
 from dataclasses import dataclass, field
@@ -105,7 +119,16 @@ class PromptEmbedding(torch.nn.Module):
 
         total_virtual_tokens = config.num_virtual_tokens * config.num_transformer_submodules
         self.embedding = torch.nn.Embedding(total_virtual_tokens, config.token_dim)
+        # PromptTuning的初始化有两种TEXT，RANDOM;
         if config.prompt_tuning_init == PromptTuningInit.TEXT:
+            # 1. 先加载指定的tokenizer;
+            # 2. 对初始文本进行tokenize,记录初始文本tokenizer后的长度；
+            # 3. 如果初始文本tokenizer后的长度大于虚拟token的长度，则初始文本内容只取虚拟token的长度；
+            # 4. 如果初始文本tokenizer后的长度小于虚拟token的长度，则将初始文本内容重复填充至虚拟token的长度；
+            # 5. 从而确保初始文本tokenizer后的长度等于虚拟token的长度；
+            # 6. 使用基础模型的词嵌入层对初始文本tokenized进行嵌入，并转换为float32位；
+            # 7. 将基础模型嵌入并转换后的权重设为可训练参数，并赋值给virtual_token的嵌入层的权重；
+            # 8. 训练时只需获取给定虚拟token对应的嵌入向量。
             from transformers import AutoTokenizer
 
             tokenizer = AutoTokenizer.from_pretrained(config.tokenizer_name_or_path)
@@ -119,7 +142,7 @@ class PromptEmbedding(torch.nn.Module):
                 num_reps = math.ceil(total_virtual_tokens / num_text_tokens)
                 init_token_ids = init_token_ids * num_reps
             init_token_ids = init_token_ids[:total_virtual_tokens]
-
+            #  The word embeddings of the base transformer model
             word_embedding_weights = word_embeddings(torch.LongTensor(init_token_ids)).detach().clone()
             word_embedding_weights = word_embedding_weights.to(torch.float32)
             self.embedding.weight = torch.nn.Parameter(word_embedding_weights)

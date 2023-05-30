@@ -12,7 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+"""
+核心方法为PrefixEncoder:
+    1. 先定义一个virtual_token序列的长度；
+    2. 然后对给定的virtual_token索引进行embedding；
+        2.1. 如果执行prefix投影，且不处于推理模式，则先嵌入，再用MLP投影，投影维度为num_layers * 2 * token_dim；
+        2.2. 否则，只进行嵌入，嵌入长度为num_layers * 2 * token_dim
+"""
 
 from dataclasses import dataclass, field
 
@@ -89,6 +95,8 @@ class PrefixEncoder(torch.nn.Module):
         num_layers = config.num_layers
         encoder_hidden_size = config.encoder_hidden_size
         num_virtual_tokens = config.num_virtual_tokens
+        # 如果prefix投影，且不处于推理模式，则先嵌入，再用MLP投影，投影维度为num_layers * 2 * token_dim；
+        # 否则，只进行嵌入，嵌入长度为num_layers * 2 * token_dim
         if self.prefix_projection and not config.inference_mode:
             # Use a two-layer MLP to encode the prefix
             self.embedding = torch.nn.Embedding(num_virtual_tokens, token_dim)

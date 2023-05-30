@@ -12,7 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+"""
+主方法为Prompt Encoder:
+    1. 先定义一个virtual_token序列的长度；
+    2. 然后对给定的virtual_token索引进行embedding；
+    3. 使用LSTM或MLP对embedding进行重新参数化；
+    4. 返回重新参数化的结果。
+    5. 算法只用于训练阶段。
+"""
 import enum
 import warnings
 from dataclasses import dataclass, field
